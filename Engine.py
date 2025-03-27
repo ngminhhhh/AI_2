@@ -88,7 +88,6 @@ def piece_square_table(piece):
     return piece_square[piece.type][row][col]
 
 
-
 def evaluate_func(board, my_pieces, opponent_pieces):
     if is_checkmate(board=board, my_pieces=my_pieces, opponent_pieces=opponent_pieces):
         return float('-inf')
@@ -170,7 +169,7 @@ def play_chess(board, white_pieces, black_pieces, depth, turn):
             print("Black win")
             return
         
-        _, move = alpha_beta_engine(board=board, my_pieces=white_pieces, opponent_pieces=black_pieces, depth=5, maximize=True)
+        _, move = alpha_beta_engine(board=board, my_pieces=white_pieces, opponent_pieces=black_pieces, depth=depth, maximize=True)
 
         if move is None:
             print("Stalemate")
@@ -182,7 +181,7 @@ def play_chess(board, white_pieces, black_pieces, depth, turn):
 
         print(f"White turn: {move_info}")
 
-        play_chess(board=board, white_pieces=white_pieces, black_pieces=black_pieces, depth=depth-1, turn="Black")
+        play_chess(board=board, white_pieces=white_pieces, black_pieces=black_pieces, depth=depth, turn="Black")
 
     else:
         if is_checkmate(board=board, my_pieces=white_pieces, opponent_pieces=black_pieces):
@@ -201,4 +200,4 @@ def play_chess(board, white_pieces, black_pieces, depth, turn):
 
         print(f"Black turn: {move_info}")
 
-        play_chess(board=board, white_pieces=white_pieces, black_pieces=black_pieces, depth=depth-1, turn="White")
+        play_chess(board=board, white_pieces=white_pieces, black_pieces=black_pieces, depth=depth, turn="White")
