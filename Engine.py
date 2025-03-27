@@ -14,7 +14,6 @@ def generate_random_move(board, my_pieces, opponent_pieces):
 
     return random.choice(all_moves)
 
-
 def piece_square_table(piece):
     piece_square = {
         "King": [
@@ -203,7 +202,7 @@ def play_chess(board, white_pieces, black_pieces, depth, turn):
         play_chess(board=board, white_pieces=white_pieces, black_pieces=black_pieces, depth=depth, turn="Black")
 
     else:
-        if is_checkmate(board=board, my_pieces=white_pieces, opponent_pieces=black_pieces):
+        if is_checkmate(board=board, my_pieces=black_pieces, opponent_pieces=white_pieces):
             print("White win")
             return
         
