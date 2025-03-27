@@ -140,7 +140,8 @@ def alpha_beta_engine(board, my_pieces, opponent_pieces, depth, maximize, alpha=
 
             for (nx, ny) in moves:
                 move_info = make_move(board, piece, nx, ny, my_pieces)
-                value, _ = alpha_beta_engine(board, my_pieces, opponent_pieces, depth - 1, alpha, beta, True)
+                value, _ = alpha_beta_engine(board=board, my_pieces=my_pieces, opponent_pieces=opponent_pieces, 
+                                               depth=depth-1, alpha=alpha, beta=beta, maximize=True)
 
                 if value < best_value:
                     best_value = value
