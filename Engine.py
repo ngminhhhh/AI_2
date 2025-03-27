@@ -79,7 +79,14 @@ def piece_square_table(piece):
         ]
     }
 
-    return piece_square[piece.type][piece.x][piece.y]
+    row, col = piece.x, piece.y
+
+    if piece.color == 'Black':
+        row = 7 - row
+        col = 7 - col
+
+    return piece_square[piece.type][row][col]
+
 
 
 def evaluate_func(board, my_pieces, opponent_pieces):
