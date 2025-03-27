@@ -40,6 +40,13 @@ captured_pieces_black = []
 en_passant_target = None
 en_passant_piece = None
 
+white_king_moved = False
+white_rook_left_moved = False   # Xe bên a1 (vị trí (0,0))
+white_rook_right_moved = False  # Xe bên h1 (vị trí (7,0))
+black_king_moved = False
+black_rook_left_moved = False    # Xe bên a8 (vị trí (0,7))
+black_rook_right_moved = False   # Xe bên h8 (vị trí (7,7))
+
 # 0 - whites turn no selection: 1-whites turn piece selected: 2- black turn no selection, 3 - black turn piece selected
 turn_step = 0
 selection = 100
@@ -186,6 +193,20 @@ def check_options(pieces, locations, turn):
         all_moves_list.append(moves_list)
     return all_moves_list
 
+def is_square_under_attack(square, attacking_color):
+    """
+    Check if a specific square is under attack by the given color
+    """
+    if attacking_color == 'white':
+        attacking_options = white_options
+    else:
+        attacking_options = black_options
+    
+    for options in attacking_options:
+        if square in options:
+            return True
+    return False
+
 def check_king(position, color):
     moves_list = []
     if color == 'white':
@@ -194,13 +215,60 @@ def check_king(position, color):
     else:
         friends_list = black_locations
         enemies_list = white_locations
+    
+    # Normal king moves (8 surrounding squares)
     targets = [(1, 0), (1, 1), (1, -1), (-1, 0),
                (-1, 1), (-1, -1), (0, 1), (0, -1)]
     for dx, dy in targets:
         target = (position[0] + dx, position[1] + dy)
         if target not in friends_list and 0 <= target[0] <= 7 and 0 <= target[1] <= 7:
             moves_list.append(target)
+    
+    # Castling logic
+    if color == 'white' and position == (3, 0) and not white_king_moved:
+        # Kingside castling (right side)
+        if not white_rook_right_moved and \
+           (1, 0) not in white_locations + black_locations and \
+           (2, 0) not in white_locations + black_locations:
+            # Additional check: squares between king and rook must not be under attack
+            if not is_square_under_attack((1, 0), 'black') and \
+               not is_square_under_attack((2, 0), 'black'):
+                moves_list.append((1, 0))
+        
+        # Queenside castling (left side)
+        if not white_rook_left_moved and \
+           (4, 0) not in white_locations + black_locations and \
+           (5, 0) not in white_locations + black_locations and \
+           (6, 0) not in white_locations + black_locations:
+            # Additional check: squares between king and rook must not be under attack
+            if not is_square_under_attack((4, 0), 'black') and \
+               not is_square_under_attack((5, 0), 'black') and \
+               not is_square_under_attack((6, 0), 'black'):
+                moves_list.append((5, 0))
+    
+    if color == 'black' and position == (3, 7) and not black_king_moved:
+        # Kingside castling (right side)
+        if not black_rook_right_moved and \
+           (1, 7) not in white_locations + black_locations and \
+           (2, 7) not in white_locations + black_locations:
+            # Additional check: squares between king and rook must not be under attack
+            if not is_square_under_attack((1, 7), 'white') and \
+               not is_square_under_attack((2, 7), 'white'):
+                moves_list.append((1, 7))
+        
+        # Queenside castling (left side)
+        if not black_rook_left_moved and \
+           (4, 7) not in white_locations + black_locations and \
+           (5, 7) not in white_locations + black_locations and \
+           (6, 7) not in white_locations + black_locations:
+            # Additional check: squares between king and rook must not be under attack
+            if not is_square_under_attack((4, 7), 'white') and \
+               not is_square_under_attack((5, 7), 'white')  and \
+               not is_square_under_attack((6, 7), 'white'):
+                moves_list.append((5, 7))
+    
     return moves_list
+
 
 def check_queen(position, color):
     moves_list = check_bishop(position, color)
@@ -406,18 +474,6 @@ def is_in_check(king_location, attacking_options):
     return False
 
 def is_checkmate(pieces, locations, options, king_color):
-    """
-    Determine if the current position is a checkmate
-    
-    Args:
-    - pieces: list of pieces for the player being checked
-    - locations: list of piece locations
-    - options: list of possible moves for all pieces
-    - king_color: color of the king being checked ('white' or 'black')
-    
-    Returns:
-    - Boolean indicating if it's a checkmate
-    """
     # Find the king's location and index
     if king_color == 'white':
         king_index = pieces.index('king')
@@ -530,7 +586,25 @@ while run:
                 if click_coords in valid_moves and selection != 100:
                     original = white_locations[selection]
                     white_locations[selection] = click_coords
+                    # Castling logic
+                    if white_pieces[selection] == 'king':
+                        if original == (3, 0) and click_coords == (5, 0):
+                            rook_index = white_locations.index((7, 0))
+                            white_locations[rook_index] = (4, 0)
+                        
+                        elif original == (3, 0) and click_coords == (1, 0):
+                            rook_index = white_locations.index((0, 0))
+                            white_locations[rook_index] = (2, 0)
+                        elif original == (2,0):
+                            white_rook_left_moved = True
+                        # Update king moved flag
+                        white_king_moved = True
 
+                    # Update rook moved flags
+                    if original == (0, 0):
+                        white_rook_left_moved = True
+                    if original == (7, 0):
+                        white_rook_right_moved = True
                     # Capture opponent's piece
                     if click_coords in black_locations:
                         capture_index = black_locations.index(click_coords)
@@ -581,7 +655,25 @@ while run:
                 if click_coords in valid_moves and selection != 100:
                     original = black_locations[selection]
                     black_locations[selection] = click_coords
+                    # Castling logic
+                    if black_pieces[selection] == 'king':
+                        if original == (3, 7) and click_coords == (5, 7):
+                            rook_index = black_locations.index((7, 7))
+                            black_locations[rook_index] = (4, 7)
+                        
+                        elif original == (3, 7) and click_coords == (1, 7):
+                            rook_index = black_locations.index((0, 7))
+                            black_locations[rook_index] = (2, 7)
+                        elif original == (3,7):
+                            black_king_moved = True
+                        # Update king moved flag
+                        black_king_moved = True
 
+                    # Update rook moved flags
+                    if original == (0, 7):
+                        black_rook_left_moved = True
+                    if original == (7, 7):
+                        black_rook_right_moved = True
                     # Capture opponent's piece
                     if click_coords in white_locations:
                         capture_index = white_locations.index(click_coords)
