@@ -87,6 +87,20 @@ def piece_square_table(piece):
 
     return piece_square[piece.type][row][col]
 
+def threat_bonus(board, my_pieces, opponent_pieces):
+    bonus = 0.0
+
+    for piece in my_pieces:
+        possible_moves = piece.get_legal_moves(board)
+
+        for (nx, ny) in possible_moves:
+            occupant = board[nx][ny]
+            if occupant is not None and occupant.color != piece.color:
+                if occupant.type == "King":
+                    bonus += 2.0
+                else:
+                    bonus += occupant.point * 0.3 
+    return bonus
 
 def evaluate_func(board, my_pieces, opponent_pieces):
     if is_checkmate(board=board, my_pieces=my_pieces, opponent_pieces=opponent_pieces):
@@ -102,6 +116,11 @@ def evaluate_func(board, my_pieces, opponent_pieces):
 
     for piece in opponent_pieces:
         score -= piece.point + piece_square_table(piece)
+
+    my_threat_bonus = threat_bonus(board, my_pieces, opponent_pieces)
+    opp_threat_bonus = threat_bonus(board, opponent_pieces, my_pieces)
+
+    score += (my_threat_bonus - opp_threat_bonus)
 
     return score
 
