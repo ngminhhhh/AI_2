@@ -6,8 +6,8 @@ def generate_random_move(board, my_pieces, opponent_pieces):
     
     for piece in my_pieces:
         valid_moves = piece.get_valid_moves(board, my_pieces, opponent_pieces)
-        for nx, ny in valid_moves:
-            all_moves.append((piece, nx, ny))
+        for move in valid_moves:
+            all_moves.append((piece, move))
     
     if not all_moves:
         return None 
@@ -90,9 +90,10 @@ def threat_bonus(board, my_pieces, opponent_pieces):
     bonus = 0.0
 
     for piece in my_pieces:
-        possible_moves = piece.get_legal_moves(board)
+        possible_moves = piece.get_legal_moves(board, my_pieces, opponent_pieces)
 
-        for (nx, ny) in possible_moves:
+        for move in possible_moves:
+            nx, ny = move["new_pos"]
             occupant = board[nx][ny]
             if occupant is not None and occupant.color != piece.color:
                 if occupant.type == "King":
@@ -100,6 +101,34 @@ def threat_bonus(board, my_pieces, opponent_pieces):
                 else:
                     bonus += occupant.point * 0.3 
     return bonus
+
+def king_safety_bonus(board, my_pieces, opponent_pieces):
+    king = [piece for piece in my_pieces if piece.type == "King"][0]
+    bonus = 0.0
+    directions = [(-1, -1), (-1, 0), (-1, 1),
+                  (0, -1),          (0, 1),
+                  (1, -1),  (1, 0),  (1, 1)]
+    
+    for dx, dy in directions:
+        nx, ny = king.x + dx, king.y + dy
+        if king.is_in_bound(nx, ny):
+            occupant = board[nx][ny]
+            if occupant is not None:
+                if occupant.color == king.color:
+                    bonus += 0.5  
+                else:
+                    bonus -= 0.5  
+            else:
+                if is_attacked_square(board, nx, ny, my_pieces, opponent_pieces):
+                    bonus -= 0.3
+                else:
+                    bonus += 0.2
+    
+    if king.is_castle:
+        bonus += 1.0  
+    
+    return bonus
+
 
 def evaluate_func(board, my_pieces, opponent_pieces):
     if is_checkmate(board=board, my_pieces=my_pieces, opponent_pieces=opponent_pieces):
@@ -120,6 +149,9 @@ def evaluate_func(board, my_pieces, opponent_pieces):
     opp_threat_bonus = threat_bonus(board, opponent_pieces, my_pieces)
 
     score += (my_threat_bonus - opp_threat_bonus)
+    
+    score += king_safety_bonus(board, my_pieces, opponent_pieces)
+    score -= king_safety_bonus(board, opponent_pieces, my_pieces)
 
     return score
 
@@ -135,14 +167,14 @@ def alpha_beta_engine(board, my_pieces, opponent_pieces, depth, maximize, alpha=
         for piece in my_pieces:
             moves = piece.get_valid_moves(board, my_pieces, opponent_pieces)
             
-            for nx, ny in moves:
-                move_info = make_move(board=board, piece=piece, nx=nx, ny=ny, opponent_pieces=opponent_pieces)
+            for move in moves:
+                move_info = make_move(board=board, piece=piece, move=move, opponent_pieces=opponent_pieces)
                 value, _ = alpha_beta_engine(board=board, my_pieces=my_pieces, opponent_pieces=opponent_pieces, 
                                                depth=depth-1, alpha=alpha, beta=beta, maximize=False)
 
                 if value > best_value:
                     best_value = value
-                    best_move = (piece, nx, ny)
+                    best_move = (piece, move)
 
                 undo_move(board=board, opponent_pieces=opponent_pieces, move_info=move_info)
                 alpha = max(alpha, best_value)
@@ -162,17 +194,18 @@ def alpha_beta_engine(board, my_pieces, opponent_pieces, depth, maximize, alpha=
         for piece in opponent_pieces:
             moves = piece.get_valid_moves(board, opponent_pieces, my_pieces)
 
-            for (nx, ny) in moves:
-                move_info = make_move(board, piece, nx, ny, my_pieces)
+            for move in moves:
+                move_info = make_move(board, piece, move, my_pieces)
                 value, _ = alpha_beta_engine(board=board, my_pieces=my_pieces, opponent_pieces=opponent_pieces, 
                                                depth=depth-1, alpha=alpha, beta=beta, maximize=True)
 
                 if value < best_value:
                     best_value = value
-                    best_move = (piece, nx, ny)
+                    best_move = (piece, move)
 
                 undo_move(board, my_pieces, move_info)
                 beta = min(beta, best_value)
+
                 if beta <= alpha:
                     break  
 
@@ -181,41 +214,42 @@ def alpha_beta_engine(board, my_pieces, opponent_pieces, depth, maximize, alpha=
         return (best_value, best_move)
 
 
-def play_chess(board, white_pieces, black_pieces, depth, turn):
-    if turn == "White":
-        if is_checkmate(board=board, my_pieces=white_pieces, opponent_pieces=black_pieces):
-            print("Black win")
-            return
-        
-        _, move = alpha_beta_engine(board=board, my_pieces=white_pieces, opponent_pieces=black_pieces, depth=depth, maximize=True)
+def play_chess(board, white_pieces, black_pieces, depth):
+    turn = "White"
 
-        if move is None:
-            print("Stalemate")
-            return
+    while True:
+        if turn == "White":
+            if is_checkmate(board, white_pieces, black_pieces):
+                print("Black win")
+                break
+            
+            _, best_move = alpha_beta_engine(
+                board, my_pieces=white_pieces, opponent_pieces=black_pieces,
+                depth=depth, maximize=True
+            )
+            if best_move is None:
+                print("Stalemate")
+                break
+            
+            moving_piece, move_dict = best_move
+            move_info = make_move(board, moving_piece, move_dict, black_pieces)
+            print("White move:", move_info)
+            
+            turn = "Black"
 
-        moving_piece, nx, ny = move
+        else:  
+            if is_checkmate(board, black_pieces, white_pieces):
+                print("White win")
+                break
 
-        move_info = make_move(board=board, piece=moving_piece, nx=nx, ny=ny, opponent_pieces=black_pieces)
+            move = generate_random_move(board, black_pieces, white_pieces)
+            if move is None:
+                print("Stalemate")
+                break
 
-        print(f"White turn: {move_info}")
+            moving_piece, move_dict = move
+            move_info = make_move(board, moving_piece, move_dict, white_pieces)
+            print("Black move:", move_info)
 
-        play_chess(board=board, white_pieces=white_pieces, black_pieces=black_pieces, depth=depth, turn="Black")
+            turn = "White"
 
-    else:
-        if is_checkmate(board=board, my_pieces=black_pieces, opponent_pieces=white_pieces):
-            print("White win")
-            return
-        
-        move = generate_random_move(board=board, my_pieces=black_pieces, opponent_pieces=white_pieces)
-
-        if move is None:
-            print("Stalemate")
-            return
-
-        moving_piece, nx, ny = move
-
-        move_info = make_move(board=board, piece=moving_piece, nx=nx, ny=ny, opponent_pieces=white_pieces)
-
-        print(f"Black turn: {move_info}")
-
-        play_chess(board=board, white_pieces=white_pieces, black_pieces=black_pieces, depth=depth, turn="White")
