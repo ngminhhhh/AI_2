@@ -216,40 +216,45 @@ def alpha_beta_engine(board, my_pieces, opponent_pieces, depth, maximize, alpha=
 
 def play_chess(board, white_pieces, black_pieces, depth):
     turn = "White"
-
     while True:
         if turn == "White":
             if is_checkmate(board, white_pieces, black_pieces):
-                print("Black win")
+                yield "GAME_OVER", "Black win"
                 break
-            
+
+            draw_reason = detect_draw(board, white_pieces, black_pieces, turn, EN_PASSANT_SQUARE)
+            if draw_reason is not None:
+                yield "GAME_OVER", draw_reason
+                break
+
             _, best_move = alpha_beta_engine(
-                board, my_pieces=white_pieces, opponent_pieces=black_pieces,
-                depth=depth, maximize=True
+                board, white_pieces, black_pieces, depth, maximize=True
             )
+
             if best_move is None:
-                print("Stalemate")
+                yield "GAME_OVER", "Stalemate"
                 break
-            
+
             moving_piece, move_dict = best_move
-            move_info = make_move(board, moving_piece, move_dict, black_pieces)
-            print("White move:", move_info)
-            
+            move_info = make_move(board, moving_piece,
+                                  move_dict, black_pieces)
+            yield "MOVE", move_info            
             turn = "Black"
 
-        else:  
+        else:
             if is_checkmate(board, black_pieces, white_pieces):
-                print("White win")
+                yield "GAME_OVER", "White win"
+                break
+
+            draw_reason = detect_draw(board, white_pieces, black_pieces, turn, EN_PASSANT_SQUARE)
+            if draw_reason is not None:
+                yield "GAME_OVER", draw_reason
                 break
 
             move = generate_random_move(board, black_pieces, white_pieces)
-            if move is None:
-                print("Stalemate")
-                break
 
             moving_piece, move_dict = move
-            move_info = make_move(board, moving_piece, move_dict, white_pieces)
-            print("Black move:", move_info)
-
+            move_info = make_move(board, moving_piece,
+                                  move_dict, white_pieces)
+            yield "MOVE", move_info
             turn = "White"
-

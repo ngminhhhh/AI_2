@@ -45,6 +45,8 @@ def init_piece(piece_images, board_size = 8):
 
     return white_pieces, black_pieces, board
 
+
+# * Function to check checkmate and stalemate
 def is_attacked_square(board, nx, ny, my_pieces, opponent_pieces):
     for piece in opponent_pieces:
         moves = piece.get_legal_moves(board, my_pieces, opponent_pieces)
@@ -71,6 +73,101 @@ def is_checkmate(board, my_pieces, opponent_pieces):
         moves += piece.get_valid_moves(board, my_pieces, opponent_pieces)
 
     return len(moves) == 0
+
+halfmove_clock = 0
+history = []
+
+def get_castling_rights(pieces):
+    kr = [p for p in pieces if p.type in ("King, Rook")]
+    return all(p.is_first_move for p in kr)
+
+# * Decode state
+def board_to_fen(board, turn, castling_array, en_passant):
+    rows = []
+    for y in range(7, -1, -1):
+        empty = 0; row = ""
+        for x in range(8):
+            p = board[x][y]
+            if p:
+                if empty:
+                    row += str(empty); empty = 0
+                sym = p.type
+                row += sym.upper() if p.color=="White" else sym.lower()
+            else:
+                empty += 1
+        if empty: row += str(empty)
+        rows.append(row)
+    board_fen = "/".join(rows)
+
+    side = "w" if turn=="White" else "b"
+
+    cw, cb = castling_array
+    castle_field = "".join(cw + cb) or "-"
+
+    ep_field = map_to_block(en_passant) if en_passant else "-"
+    return f"{board_fen} {side} {castle_field} {ep_field}"
+
+# * Record state
+def record_position(board, turn, white_pieces, black_pieces, en_passant):
+    castling_array = get_castling_rights(white_pieces, black_pieces)
+    fen = board_to_fen(board, turn, castling_array, en_passant)
+    history[fen] += 1
+
+
+def update_halfmove_clock(move_info):
+    global halfmove_clock
+    if move_info.type in ("en_passant", "normal") and move_info.piece.type=="Pawn":
+        halfmove_clock = 0
+    elif move_info.type=="normal" and move_info.captured_piece:
+        halfmove_clock = 0
+    else:
+        halfmove_clock += 1
+
+
+def is_insufficient_material(white_pieces, black_pieces):
+    all_pts = [p.type for p in white_pieces + black_pieces]
+
+    if all_pts.count("King")==2 and len(all_pts)==2:
+        return True
+
+    minor = ["Knight","Bishop"]
+    for side in [white_pieces, black_pieces]:
+        others = [p for p in side if p.type in minor]
+        if len(others)==1 and len(side)==2:
+
+            opp = black_pieces if side is white_pieces else white_pieces
+            if len(opp)==1 and opp[0].type=="King":
+                return True
+            
+    return False
+
+def is_stalemate(board, my_pieces, opponent_pieces):
+    if is_check(board, my_pieces, opponent_pieces):
+        return False
+    for p in my_pieces:
+        if p.get_valid_moves(board, my_pieces, opponent_pieces):
+            return False
+    return True
+
+
+def detect_draw(board, white_pieces, black_pieces, turn, en_passant):
+    if is_insufficient_material(white_pieces, black_pieces):
+        return "Draw by insufficient material"
+
+    if halfmove_clock >= 100:
+        return "Draw by fifty‑move rule"
+
+
+    castling_array = [get_castling_rights(white_pieces), get_castling_rights(black_pieces)]
+    fen = board_to_fen(board, turn, castling_array, en_passant)
+    if history[fen] >= 3:
+        return "Draw by threefold repetition"
+
+    my, opp = (white_pieces, black_pieces) if turn=="White" else (black_pieces, white_pieces)
+    if is_stalemate(board, my, opp):
+        return "Stalemate"
+    
+    return None
 
 def make_move(board, piece, move, opponent_pieces):
     move_type = move['type']
@@ -139,6 +236,7 @@ def make_move(board, piece, move, opponent_pieces):
         piece.moves(nx, ny)
         EN_PASSANT_SQUARE = None
 
+    # update_halfmove_clock(move_info)
     return move_info
 
 def undo_move(board, opponent_pieces, move_info):
