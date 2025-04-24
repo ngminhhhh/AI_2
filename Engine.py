@@ -222,7 +222,7 @@ def play_chess(board, white_pieces, black_pieces, depth):
                 yield "GAME_OVER", "Black win"
                 break
 
-            draw_reason = detect_draw(board, white_pieces, black_pieces, turn, EN_PASSANT_SQUARE)
+            draw_reason = detect_draw(board, white_pieces, black_pieces, turn)
             if draw_reason is not None:
                 yield "GAME_OVER", draw_reason
                 break
@@ -238,6 +238,7 @@ def play_chess(board, white_pieces, black_pieces, depth):
             moving_piece, move_dict = best_move
             move_info = make_move(board, moving_piece,
                                   move_dict, black_pieces)
+            count =  record_state(board, EN_PASSANT_SQUARE, derive_castling_array(white_pieces, black_pieces))
             yield "MOVE", move_info            
             turn = "Black"
 
@@ -246,7 +247,7 @@ def play_chess(board, white_pieces, black_pieces, depth):
                 yield "GAME_OVER", "White win"
                 break
 
-            draw_reason = detect_draw(board, white_pieces, black_pieces, turn, EN_PASSANT_SQUARE)
+            draw_reason = detect_draw(board, white_pieces, black_pieces, turn)
             if draw_reason is not None:
                 yield "GAME_OVER", draw_reason
                 break
@@ -256,5 +257,7 @@ def play_chess(board, white_pieces, black_pieces, depth):
             moving_piece, move_dict = move
             move_info = make_move(board, moving_piece,
                                   move_dict, white_pieces)
+            count =  record_state(board, EN_PASSANT_SQUARE, derive_castling_array(white_pieces, black_pieces))
+
             yield "MOVE", move_info
             turn = "White"
