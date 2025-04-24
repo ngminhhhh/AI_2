@@ -65,6 +65,8 @@ def init():
     level_medium_btn = pygame.Rect(BOARD_WIDTH + PANEL_MARGIN , HEIGHT // 2, start_btn_width, start_btn_height)
     level_hard_btn = pygame.Rect(BOARD_WIDTH + PANEL_MARGIN , HEIGHT // 2 + 2 * start_btn_height, start_btn_width, start_btn_height)
 
+    restart_btn = pygame.Rect(BOARD_WIDTH + PANEL_MARGIN , (HEIGHT - start_btn_height) // 2, start_btn_width, start_btn_height)    
+
     started  = False
 
     return {
@@ -80,6 +82,7 @@ def init():
         'level_easy_btn': level_easy_btn,
         'level_medium_btn': level_medium_btn,
         'level_hard_btn': level_hard_btn,
+        'restart_btn': restart_btn,
         'started'      : started
     }
 
@@ -94,7 +97,6 @@ def draw_button(screen, mx, my, btn, font, text):
     pygame.draw.rect(screen, color, btn)
     txt = font.render(text, True, TEXT_COL)
     screen.blit(txt, (btn.x + (start_btn_width - txt.get_width()) // 2, btn.y + (start_btn_height - txt.get_height()) // 2))
-
 
 def run():
     ctx = init()
@@ -114,6 +116,8 @@ def run():
     level_medium_btn = ctx['level_medium_btn']
     level_hard_btn = ctx['level_hard_btn']
 
+    restart_btn = ctx["restart_btn"]
+
     move_delay = 500
     last_move_time = 0
     game_over_msg = None
@@ -125,10 +129,15 @@ def run():
     choose_side_state = False
     choose_level_state = False
     started = False
+    restart_state = False
 
     # * Params
     side = None 
     depth = 0
+
+    # * Handle double click
+    last_click_time = 0
+    CLICK_COOLDOWN = 200  # ms
 
     while running:
         mx, my = pygame.mouse.get_pos()
@@ -137,9 +146,16 @@ def run():
             if e.type == pygame.QUIT:
                 running = False
             elif e.type == pygame.MOUSEBUTTONDOWN and e.button == 1:
+                now = pygame.time.get_ticks()
+                if now - last_click_time < CLICK_COOLDOWN:
+                    continue
+
+                last_click_time = now
+
                 if start_btn_rect.collidepoint(mx, my) and begin_state:
                     begin_state = False
                     choose_side_state = True
+                    continue
                 
                 if choose_side_state:
                     for btn, name in [(white_side_btn, "White"), (black_side_btn, "Black")]:
@@ -163,7 +179,18 @@ def run():
                                     side)
                             
                             last_move_time = pygame.time.get_ticks()
-                
+                    
+                if restart_state and restart_btn.collidepoint(mx, my):
+                    restart_state = False
+                    begin_state = True
+
+                    side = None
+                    depth = 0
+
+                    restart_all()
+                    white_pieces, black_pieces, board   = init_piece(load_piece_images())
+
+
         # * Engine render
         if started and pygame.time.get_ticks() - last_move_time >= move_delay:
             try:
@@ -173,6 +200,7 @@ def run():
                 elif tag == "GAME_OVER":
                     game_over_msg = payload
                     started = False
+                    restart_state = True
 
                 last_move_time = pygame.time.get_ticks()
 
@@ -208,8 +236,15 @@ def run():
             draw_button(screen, mx, my, level_medium_btn, font, "Medium")
             draw_button(screen, mx, my, level_hard_btn, font, "Hard")
 
-        if game_over_msg:
-            print(payload)
+        # * Draw message and restart button
+        if restart_state:
+            txt = font.render(game_over_msg, True, TEXT_COL)
+
+            x = BOARD_WIDTH + (PANEL_WIDTH - txt.get_width()) // 2
+            y = restart_btn.y - 100  
+            
+            screen.blit(txt, (x, y))
+            draw_button(screen, mx, my, restart_btn, font, "Restart")
 
         pygame.display.flip()
         clock.tick(60)

@@ -78,6 +78,11 @@ def is_checkmate(board, my_pieces, opponent_pieces):
 # * Threefold repetition
 state_counter = Counter()
 
+def restart_all():
+    global state_counter, EN_PASSANT_SQUARE
+    state_counter.clear()  
+    EN_PASSANT_SQUARE = None
+
 def map_to_sym(type):
     if type == "Knight":
         return "N"
