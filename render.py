@@ -57,6 +57,14 @@ def init():
     white_pieces, black_pieces, board   = init_piece(piece_images)
 
     btn_rect = pygame.Rect(BOARD_WIDTH + PANEL_MARGIN , (HEIGHT - start_btn_height) // 2, start_btn_width, start_btn_height)
+    
+    white_side_btn = pygame.Rect(BOARD_WIDTH + PANEL_MARGIN , HEIGHT // 2 - start_btn_height, start_btn_width, start_btn_height)
+    black_side_btn = pygame.Rect(BOARD_WIDTH + PANEL_MARGIN , HEIGHT // 2 + start_btn_height, start_btn_width, start_btn_height)
+
+    level_easy_btn = pygame.Rect(BOARD_WIDTH + PANEL_MARGIN , HEIGHT // 2 - 2 * start_btn_height, start_btn_width, start_btn_height)
+    level_medium_btn = pygame.Rect(BOARD_WIDTH + PANEL_MARGIN , HEIGHT // 2, start_btn_width, start_btn_height)
+    level_hard_btn = pygame.Rect(BOARD_WIDTH + PANEL_MARGIN , HEIGHT // 2 + 2 * start_btn_height, start_btn_width, start_btn_height)
+
     started  = False
 
     return {
@@ -66,7 +74,12 @@ def init():
         'white_pieces' : white_pieces,
         'black_pieces' : black_pieces,
         'board'        : board,
-        'btn_rect'     : btn_rect,
+        'start_btn_rect': btn_rect,
+        'white_side_btn': white_side_btn,
+        'black_side_btn': black_side_btn,
+        'level_easy_btn': level_easy_btn,
+        'level_medium_btn': level_medium_btn,
+        'level_hard_btn': level_hard_btn,
         'started'      : started
     }
 
@@ -75,6 +88,13 @@ def draw_piece(screen, pieces):
         px = p.x * SQUARE_SIZE + MARGIN
         py = p.y * SQUARE_SIZE + MARGIN
         screen.blit(p.piece_image, (px, py))
+
+def draw_button(screen, mx, my, btn, font, text):
+    color = BTN_HOVER if btn.collidepoint(mx, my) else BTN_COLOR
+    pygame.draw.rect(screen, color, btn)
+    txt = font.render(text, True, TEXT_COL)
+    screen.blit(txt, (btn.x + (start_btn_width - txt.get_width()) // 2, btn.y + (start_btn_height - txt.get_height()) // 2))
+
 
 def run():
     ctx = init()
@@ -85,14 +105,30 @@ def run():
     white_pieces = ctx['white_pieces']
     black_pieces = ctx['black_pieces']
     board        = ctx['board']
-    btn_rect     = ctx['btn_rect']
+    start_btn_rect     = ctx['start_btn_rect']
     started      = ctx['started']
+    white_side_btn = ctx['white_side_btn']
+    black_side_btn = ctx['black_side_btn']
+
+    level_easy_btn = ctx['level_easy_btn']
+    level_medium_btn = ctx['level_medium_btn']
+    level_hard_btn = ctx['level_hard_btn']
 
     move_delay = 500
     last_move_time = 0
     game_over_msg = None
 
     running = True
+
+    # * Flag
+    begin_state = True
+    choose_side_state = False
+    choose_level_state = False
+    started = False
+
+    # * Params
+    side = None 
+    depth = 0
 
     while running:
         mx, my = pygame.mouse.get_pos()
@@ -101,18 +137,33 @@ def run():
             if e.type == pygame.QUIT:
                 running = False
             elif e.type == pygame.MOUSEBUTTONDOWN and e.button == 1:
-                if btn_rect.collidepoint(mx, my) and not started:
-                    started = True
+                if start_btn_rect.collidepoint(mx, my) and begin_state:
+                    begin_state = False
+                    choose_side_state = True
+                
+                if choose_side_state:
+                    for btn, name in [(white_side_btn, "White"), (black_side_btn, "Black")]:
+                        if btn.collidepoint(mx, my):
+                            side = name
+                            choose_side_state = False
+                            choose_level_state = True
+                            break
 
-                    stepper = play_chess(board,
-                            white_pieces,
-                            black_pieces,
-                            depth=2)
-                    
-                    last_move_time = pygame.time.get_ticks()
+                if choose_level_state:
+                    for btn, level in [(level_easy_btn, 1), (level_medium_btn, 2), (level_hard_btn, 3)]:
+                        if btn.collidepoint(mx, my):
+                            depth = level
+                            choose_level_state = False
+                            started = True
 
-                    print("On click")
-
+                            stepper = play_chess(board,
+                                    white_pieces,
+                                    black_pieces,
+                                    depth,
+                                    side)
+                            
+                            last_move_time = pygame.time.get_ticks()
+                
         # * Engine render
         if started and pygame.time.get_ticks() - last_move_time >= move_delay:
             try:
@@ -141,21 +192,24 @@ def run():
 
         # * Draw sidebar
         pygame.draw.rect(screen, PANEL_BG, (BOARD_WIDTH, 0, PANEL_WIDTH, HEIGHT))
-        title_surf = font.render("CHESS info", True, TEXT_COL)
-        screen.blit(title_surf, (BOARD_WIDTH + 30, 10))
 
         # * Draw start button
-        btn_color = BTN_HOVER if btn_rect.collidepoint(mx, my) else BTN_COLOR
-        pygame.draw.rect(screen, btn_color, btn_rect)
+        if begin_state:
+            draw_button(screen, mx, my, start_btn_rect, font, "Start")
+        
+        # * Draw choose side button
+        if choose_side_state:
+            draw_button(screen, mx, my, white_side_btn, font, "White")
+            draw_button(screen, mx, my, black_side_btn, font, "Black")
 
-        txt = font.render("Start", True, TEXT_COL)
-        screen.blit(txt, (btn_rect.x + (start_btn_width - txt.get_width()) // 2, btn_rect.y + (start_btn_height - txt.get_height()) // 2))
+        # * Draw choose level button
+        if choose_level_state:
+            draw_button(screen, mx, my, level_easy_btn, font, "Easy")
+            draw_button(screen, mx, my, level_medium_btn, font, "Medium")
+            draw_button(screen, mx, my, level_hard_btn, font, "Hard")
 
         if game_over_msg:
-            box = pygame.Rect((WIDTH - BOX_WIDTH) // 2 , (HEIGHT - BOX_HEIGHT) // 2, BOX_WIDTH, BOX_HEIGHT)
-            pygame.draw.rect(screen, PANEL_BG, box)
-            txt_info = font.render(payload, True, TEXT_COL)
-            screen.blit(txt_info, (box.x + (BOX_WIDTH - txt_info.get_width()) // 2, box.y + (BOX_HEIGHT - txt_info.get_height()) // 2))
+            print(payload)
 
         pygame.display.flip()
         clock.tick(60)

@@ -82,7 +82,6 @@ def piece_square_table(piece):
 
     if piece.color == 'Black':
         row = 7 - row
-        col = 7 - col
 
     return piece_square[piece.type][row][col]
 
@@ -214,50 +213,32 @@ def alpha_beta_engine(board, my_pieces, opponent_pieces, depth, maximize, alpha=
         return (best_value, best_move)
 
 
-def play_chess(board, white_pieces, black_pieces, depth):
+def play_chess(board, white_pieces, black_pieces, depth, agent_side):
     turn = "White"
     while True:
-        if turn == "White":
-            if is_checkmate(board, white_pieces, black_pieces):
-                yield "GAME_OVER", "Black win"
-                break
+        my_pieces, opp_pieces = (white_pieces, black_pieces) if turn=="White" else (black_pieces, white_pieces)
+        if is_checkmate(board, my_pieces, opp_pieces):
+            winner = "Black" if turn=="White" else "White"
+            yield "GAME_OVER", f"{winner} win"
+            break
 
-            draw_reason = detect_draw(board, white_pieces, black_pieces, turn)
-            if draw_reason is not None:
-                yield "GAME_OVER", draw_reason
-                break
+        draw_reason = detect_draw(board, white_pieces, black_pieces, turn)
+        if draw_reason:
+            yield "GAME_OVER", draw_reason
+            break
 
-            _, best_move = alpha_beta_engine(
-                board, white_pieces, black_pieces, depth, maximize=True
-            )
-
-            if best_move is None:
-                yield "GAME_OVER", "Stalemate"
-                break
-
-            moving_piece, move_dict = best_move
-            move_info = make_move(board, moving_piece,
-                                  move_dict, black_pieces)
-            count =  record_state(board, EN_PASSANT_SQUARE, derive_castling_array(white_pieces, black_pieces))
-            yield "MOVE", move_info            
-            turn = "Black"
-
+        if turn == agent_side:
+            _, best = alpha_beta_engine(board, white_pieces, black_pieces, depth,
+                                        maximize=(turn=="White"))
+            move_pair = best
         else:
-            if is_checkmate(board, black_pieces, white_pieces):
-                yield "GAME_OVER", "White win"
-                break
+            move_pair = generate_random_move(board, my_pieces, opp_pieces)
 
-            draw_reason = detect_draw(board, white_pieces, black_pieces, turn)
-            if draw_reason is not None:
-                yield "GAME_OVER", draw_reason
-                break
+        piece, move_dict = move_pair
+        move_info = make_move(board, piece, move_dict, opp_pieces)
 
-            move = generate_random_move(board, black_pieces, white_pieces)
+        record_state(board, EN_PASSANT_SQUARE, derive_castling_array(white_pieces, black_pieces))
 
-            moving_piece, move_dict = move
-            move_info = make_move(board, moving_piece,
-                                  move_dict, white_pieces)
-            count =  record_state(board, EN_PASSANT_SQUARE, derive_castling_array(white_pieces, black_pieces))
+        yield "MOVE", move_info
+        turn = "Black" if turn=="White" else "White"
 
-            yield "MOVE", move_info
-            turn = "White"
