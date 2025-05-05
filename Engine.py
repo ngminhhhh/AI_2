@@ -1,5 +1,6 @@
 import random
 from Piece import *
+from evaluation import *
 
 def generate_random_move(board, my_pieces, opponent_pieces):
     all_moves = []
@@ -85,21 +86,21 @@ def piece_square_table(piece):
 
     return piece_square[piece.type][row][col]
 
-def threat_bonus(board, my_pieces, opponent_pieces):
-    bonus = 0.0
+# def threat_bonus(board, my_pieces, opponent_pieces):
+#     bonus = 0.0
 
-    for piece in my_pieces:
-        possible_moves = piece.get_legal_moves(board, my_pieces, opponent_pieces)
+#     for piece in my_pieces:
+#         possible_moves = piece.get_legal_moves(board, my_pieces, opponent_pieces)
 
-        for move in possible_moves:
-            nx, ny = move["new_pos"]
-            occupant = board[nx][ny]
-            if occupant is not None and occupant.color != piece.color:
-                if occupant.type == "King":
-                    bonus += 2.0
-                else:
-                    bonus += occupant.point * 0.3 
-    return bonus
+#         for move in possible_moves:
+#             nx, ny = move["new_pos"]
+#             occupant = board[nx][ny]
+#             if occupant is not None and occupant.color != piece.color:
+#                 if occupant.type == "King":
+#                     bonus += 2.0
+#                 else:
+#                     bonus += occupant.point * 0.3 
+#     return bonus
 
 def king_safety_bonus(board, my_pieces, opponent_pieces):
     king = [piece for piece in my_pieces if piece.type == "King"][0]
@@ -154,28 +155,29 @@ def evaluate_func(board, my_pieces, opponent_pieces):
 
     return score
 
+def alpha_beta_engine(board, white_pieces, black_pieces, depth, maximize, alpha=float("-inf"), beta=float("inf")):
+    turn = "white" if maximize else "black"
 
-def alpha_beta_engine(board, my_pieces, opponent_pieces, depth, maximize, alpha=float("-inf"), beta=float("inf")):
     if depth == 0:
-        return (evaluate_func(board, my_pieces, opponent_pieces), None)
+        return (evaluate_position(board, white_pieces, black_pieces, turn), None)
     
     if maximize:
         best_value = float("-inf")
         best_move = None
 
-        for piece in my_pieces:
-            moves = piece.get_valid_moves(board, my_pieces, opponent_pieces)
+        for piece in white_pieces:
+            moves = piece.get_valid_moves(board, white_pieces, black_pieces)
             
             for move in moves:
-                move_info = make_move(board=board, piece=piece, move=move, opponent_pieces=opponent_pieces)
-                value, _ = alpha_beta_engine(board=board, my_pieces=my_pieces, opponent_pieces=opponent_pieces, 
+                move_info = make_move(board=board, piece=piece, move=move, opponent_pieces=black_pieces)
+                value, _ = alpha_beta_engine(board=board, white_pieces=white_pieces, black_pieces=black_pieces, 
                                                depth=depth-1, alpha=alpha, beta=beta, maximize=False)
 
                 if value > best_value:
                     best_value = value
                     best_move = (piece, move)
 
-                undo_move(board=board, opponent_pieces=opponent_pieces, move_info=move_info)
+                undo_move(board=board, opponent_pieces=black_pieces, move_info=move_info)
                 alpha = max(alpha, best_value)
 
                 if beta <= alpha:
@@ -190,19 +192,19 @@ def alpha_beta_engine(board, my_pieces, opponent_pieces, depth, maximize, alpha=
         best_value = float("inf")
         best_move = None
 
-        for piece in opponent_pieces:
-            moves = piece.get_valid_moves(board, opponent_pieces, my_pieces)
+        for piece in black_pieces:
+            moves = piece.get_valid_moves(board, black_pieces, white_pieces)
 
             for move in moves:
-                move_info = make_move(board, piece, move, my_pieces)
-                value, _ = alpha_beta_engine(board=board, my_pieces=my_pieces, opponent_pieces=opponent_pieces, 
+                move_info = make_move(board, piece, move, white_pieces)
+                value, _ = alpha_beta_engine(board=board, white_pieces=white_pieces, black_pieces=black_pieces, 
                                                depth=depth-1, alpha=alpha, beta=beta, maximize=True)
 
                 if value < best_value:
                     best_value = value
                     best_move = (piece, move)
 
-                undo_move(board, my_pieces, move_info)
+                undo_move(board, white_pieces, move_info)
                 beta = min(beta, best_value)
 
                 if beta <= alpha:
@@ -241,4 +243,3 @@ def play_chess(board, white_pieces, black_pieces, depth, agent_side):
 
         yield "MOVE", move_info
         turn = "Black" if turn=="White" else "White"
-
