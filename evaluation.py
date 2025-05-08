@@ -1,13 +1,29 @@
 from Piece import *
 
 piece_values = {
-    'King': 0,   # Vua không định giá
+    'King': 0,   
     'Queen': 900,
     'Rook': 500,
     'Bishop': 330,
     'Knight': 320,
     'Pawn': 100
 }
+
+def threat_bonus(board, my_pieces, opponent_pieces):
+    bonus = 0.0
+
+    for piece in my_pieces:
+        possible_moves = piece.get_legal_moves(board, my_pieces, opponent_pieces)
+
+        for move in possible_moves:
+            nx, ny = move["new_pos"]
+            occupant = board[nx][ny]
+            if occupant is not None and occupant.color != piece.color:
+                if occupant.type == "King":
+                    bonus += 5
+                else:
+                    bonus += occupant.point 
+    return bonus
 
 def evaluate_opening(board, white_pieces, black_pieces):
     score = 0
@@ -40,9 +56,11 @@ def evaluate_opening(board, white_pieces, black_pieces):
     castle_bonus = 30
     white_king = next(p for p in white_pieces if p.type == 'King')
     black_king = next(p for p in black_pieces if p.type == 'King')
+
     if getattr(white_king, 'is_castle', False):
         score += castle_bonus
     if getattr(black_king, 'is_castle', False):
+
         score -= castle_bonus
     return score
 
@@ -67,6 +85,7 @@ def evaluate_middlegame(board, white_pieces, black_pieces):
         score -= piece_values[piece.type]
 
     mobility_weights = {'Queen': 2, 'Rook': 2, 'Bishop': 1, 'Knight': 1, 'Pawn': 0.5, 'King': 0} 
+
     for piece in white_pieces:
         moves = piece.get_legal_moves(board, white_pieces, black_pieces)
         score += len(moves) * mobility_weights.get(piece.type, 1)
@@ -95,6 +114,7 @@ def evaluate_middlegame(board, white_pieces, black_pieces):
                                  if p.type == 'Pawn' and (p.x, p.y) in black_king_neighbors)
     if pawns_near_black_king < 2:
         score += king_safety_penalty * (2 - pawns_near_black_king)
+
     return score
 
 
@@ -168,22 +188,6 @@ def determine_game_phase(white_pieces, black_pieces):
     else:
         return 'endgame'
 
-def threat_bonus(board, my_pieces, opponent_pieces):
-    bonus = 0.0
-
-    for piece in my_pieces:
-        possible_moves = piece.get_legal_moves(board, my_pieces, opponent_pieces)
-
-        for move in possible_moves:
-            nx, ny = move["new_pos"]
-            occupant = board[nx][ny]
-            if occupant is not None and occupant.color != piece.color:
-                if occupant.type == "King":
-                    bonus += 100
-                else:
-                    bonus += occupant.point * 0.3 
-    return bonus
-
 
 def evaluate_position(board, white_pieces, black_pieces, turn):
     if turn.lower() == "white":
@@ -193,9 +197,8 @@ def evaluate_position(board, white_pieces, black_pieces, turn):
         my_pieces = black_pieces
         opponent_pieces = white_pieces
 
-    
-    # if any_move_leads_to_checkmate(board, my_pieces, opponent_pieces):
-    #     return 10000 
+    if is_checkmate(board, opponent_pieces, my_pieces):
+        return 10000
     
     if is_checkmate(board, my_pieces, opponent_pieces):
         return -10000

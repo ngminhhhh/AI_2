@@ -4,10 +4,16 @@ from collections import Counter
 EN_PASSANT_SQUARE = None
 
 def map_to_block(pos, board_size=8):
+    '''
+        map (x, y) to board coordinate
+    '''
     x, y = pos 
     return chr(x + 65) + str(board_size - y)
 
 def init_piece(piece_images, board_size = 8):
+    '''
+        * Init all started position when game start
+    '''
     white_pieces = [
         Rook(0, 7, "White", piece_images["white_rook"]),
         Knight(1, 7, "White", piece_images["white_knight"]),
@@ -49,6 +55,9 @@ def init_piece(piece_images, board_size = 8):
 
 # * Function to check checkmate and stalemate
 def is_attacked_square(board, nx, ny, my_pieces, opponent_pieces):
+    '''
+        return True if (nx, ny) is attacked by opponent pieces
+    '''
     for piece in opponent_pieces:
         moves = piece.get_legal_moves(board, my_pieces, opponent_pieces)
 
@@ -61,11 +70,17 @@ def is_attacked_square(board, nx, ny, my_pieces, opponent_pieces):
     return False
 
 def is_check(board, my_pieces, opponent_pieces):
+    '''
+        return true if this state side's king is attacked
+    '''
     my_king = [piece for piece in my_pieces if piece.type == "King"][0]
 
     return is_attacked_square(board, my_king.x, my_king.y, my_pieces, opponent_pieces)
 
 def is_checkmate(board, my_pieces, opponent_pieces):
+    '''
+        return true if this state my piece is checkmate
+    '''
     if not is_check(board, my_pieces, opponent_pieces):
         return False
     
@@ -89,6 +104,9 @@ def map_to_sym(type):
     return type[0]
 
 def derive_castling_array(white_pieces, black_pieces):
+    '''
+        return castle rights of two sides
+    '''
     rights_white, rights_black = [], []
 
     # * White
@@ -109,41 +127,42 @@ def derive_castling_array(white_pieces, black_pieces):
 
     return [rights_white, rights_black]
 
-def encode_state(board, en_passant, castling_rights):
+def encode_state(board, turn, en_passant, castling_rights):
     # * Board
     rows = []
     for y in range(7, -1, -1):
         empty = 0
         row = ""
-
         for x in range(8):
             p = board[x][y]
-
-            if p is not None:
+            if p is None:
+                empty += 1
+            else:
+                # flush any empties so far
                 if empty:
                     row += str(empty)
                     empty = 0
-                sym = map_to_sym(p.type)
+                sym = map_to_sym(p.type)  # e.g. 'p','n','b','r','q','k'
                 row += sym.upper() if p.color == "White" else sym.lower()
-            else:
-                empty = 1
         
-        row += str(empty) if empty else ""
+        if empty:
+            row += str(empty)
         rows.append(row)
-
     board_fen = "/".join(rows)
+
+    stm = "w" if turn.lower().startswith("w") else "b"
 
     # * Castle Right
     rights_white, rights_black = castling_rights
-    castle_field = "".join(rights_white + rights_black) or "-"
+    cr = "".join(rights_white + rights_black) or "-"
 
     # * En passant
     ep = map_to_block(en_passant) if en_passant else "-"
 
-    return f"{board_fen} {castle_field} {ep}"
+    return f"{board_fen} {stm} {cr} {ep}"
 
-def record_state(board, en_passant, castling_rights):
-    key = encode_state(board, en_passant, castling_rights)
+def record_state(board, turn, en_passant, castling_rights):
+    key = encode_state(board, turn, en_passant, castling_rights)
     state_counter[key] += 1
 
     return state_counter[key]
@@ -183,7 +202,7 @@ def is_stalemate(board, my_pieces, opponent_pieces):
 
 def detect_draw(board, white_pieces, black_pieces, turn):
     # * Threefold repetition
-    state = encode_state(board, EN_PASSANT_SQUARE, derive_castling_array(white_pieces, black_pieces))
+    state = encode_state(board, turn, EN_PASSANT_SQUARE, derive_castling_array(white_pieces, black_pieces))
     count = state_counter[state]
 
     if count >= 3:
@@ -202,10 +221,12 @@ def detect_draw(board, white_pieces, black_pieces, turn):
     
     return None
 
+# * -----------------------------------------------------------------------------------------------------------------------------
 def make_move(board, piece, move, opponent_pieces):
     move_type = move['type']
     move_info = None
     global EN_PASSANT_SQUARE
+
     old_en_passant = EN_PASSANT_SQUARE
 
     if move_type == "normal":
