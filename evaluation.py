@@ -1,241 +1,278 @@
-from Piece import *
+from ChessState import *
 
-piece_values = {
-    'King': 0,   
-    'Queen': 900,
-    'Rook': 500,
-    'Bishop': 330,
-    'Knight': 320,
-    'Pawn': 100
+DEV_KNIGHT_BISHOP = 10  
+DEV_ROOK            = 5   
+
+CENTER_FULL    = 15  
+CENTER_HALF    = 7   
+
+MOBILITY_WEIGHT = {
+    'Pawn':   0,   
+    'Knight': 1,   
+    'Bishop': 1,   
+    'Rook':   0.5, 
+    'Queen':  0.2, 
+    'King':   0
 }
 
-def threat_bonus(board, my_pieces, opponent_pieces):
-    bonus = 0.0
+KING_THREAT_WEIGHT = -2  
+KING_SHIELD_WEIGHT =  1  
 
-    for piece in my_pieces:
-        possible_moves = piece.get_legal_moves(board, my_pieces, opponent_pieces)
+TRAPPED_PENALTY = -5  
 
-        for move in possible_moves:
-            nx, ny = move["new_pos"]
-            occupant = board[nx][ny]
-            if occupant is not None and occupant.color != piece.color:
-                if occupant.type == "King":
-                    bonus += 5
+OUTPOST_BONUS = 8  
+
+ISOLATED_PENALTY = -5  
+DOUBLED_PENALTY  = -5  
+
+PASSED_BASE    = 10  
+PASSED_PER_RANK= 2   
+
+EG_KING_MOBILITY_MULT = 2  
+
+CONTEMPT_VALUE = 10  
+
+def is_pawn_control(chess_state, r, c, color):
+    if color == "White":
+        offsets = [(1, -1), (1, 1)]
+    else:
+        offsets = [(-1, -1), (-1, 1)]
+
+    for dr, dc in offsets:
+        nr, nc = r + dr, c + dc
+        if 0 <= nr < 8 and 0 <= nc < 8:
+            p = chess_state.board[nr][nc]
+            if p and p.type == "Pawn" and p.color == color:
+                return True
+    return False
+
+def is_passed_pawn(chess_state, pawn):
+    f = pawn.x
+    r = pawn.y
+    if pawn.color == 'White':
+        for pb in chess_state.black_pieces:
+            if pb.type == "Pawn" and abs(pb.x - f) <= 1 and pb.y < r:
+                return False
+            
+        return True
+    else:
+        for pb in chess_state.white_pieces:
+            if pb.type == "Pawn" and abs(pb.x - f) <= 1 and pb.y > r:
+                return False
+            
+        return True
+        
+def development_bonus(chess_state, turn):
+    mg_bonus = 0
+    lst = chess_state.white_pieces if turn == "White" else chess_state.black_pieces
+
+    init_positions = {
+        'White': {'Knight': [(7,1),(7,6)], 'Bishop': [(7,2),(7,5)], 'Rook': [(7,0),(7,7)]},
+        'Black': {'Knight': [(0,1),(0,6)], 'Bishop': [(0,2),(0,5)], 'Rook': [(0,0),(0,7)]}
+    }
+
+    for piece in lst:
+        if piece.type in init_positions[turn]:
+            if (piece.x, piece.y) not in init_positions[turn][piece.type]:
+                if piece.type in ("Knight", "Bishop"):
+                    mg_bonus += DEV_KNIGHT_BISHOP  
                 else:
-                    bonus += occupant.point 
+                    mg_bonus += DEV_ROOK             
+
+    return mg_bonus if turn == "White" else -mg_bonus
+
+def center_control_bonus(chess_state, turn):
+    mg_bonus = 0
+    center_squares = [(4,4),(4,3),(3,4),(3,3)]
+    half_center    = [(5,2),(5,5),(2,2),(2,5)]
+
+    lst = chess_state.white_pieces if turn == "White" else chess_state.black_pieces
+    for piece in lst:
+        if (piece.x, piece.y) in center_squares:
+            mg_bonus += CENTER_FULL      
+        elif (piece.x, piece.y) in half_center:
+            mg_bonus += CENTER_HALF      
+
+    return mg_bonus if turn == "White" else -mg_bonus
+
+
+def mobility_bonus(chess_state, turn):
+    mobility_point = 0
+    lst = chess_state.white_pieces if turn == "White" else chess_state.black_pieces
+    for piece in lst:
+        moves = piece.get_valid_moves(chess_state)
+        mobility_point += MOBILITY_WEIGHT[piece.type] * len(moves)
+    return mobility_point
+
+
+def pawn_shield_bonus(king, chess_state):
+    r, c = king.y, king.x
+    shield = 0
+    if king.color == 'white':
+        directions = [( -1, 0), (-1, -1), (-1, 1)]
+    else:
+        directions = [( 1, 0), (1, -1), (1, 1)]
+    for dr, dc in directions:
+        nr, nc = r + dr, c + dc
+        if 0 <= nr < 8 and 0 <= nc < 8:
+            p = chess_state.board[nr][nc]
+            if p and p.type == "Pawn" and p.color == king.color:
+                shield += 1
+
+    return shield
+
+def king_safety_bonus(chess_state, turn):
+    threat = 0
+    my_lst = chess_state.white_pieces if turn == "White" else chess_state.black_pieces
+    op_lst = chess_state.white_pieces if turn == "Black" else chess_state.black_pieces
+
+    my_king = next((p for p in my_lst if p.type == "King"), None)
+    for piece in op_lst:
+        moves = piece.get_legal_moves(chess_state)
+        if (my_king.x, my_king.y) in moves:
+            threat += 1
+
+    shield = pawn_shield_bonus(my_king, chess_state)
+    return threat * KING_THREAT_WEIGHT, shield * KING_SHIELD_WEIGHT  
+
+
+def trapped_minus(chess_state, turn):
+    minus = 0
+    lst = chess_state.white_pieces if turn == "White" else chess_state.black_pieces
+    for piece in lst:
+        if len(piece.get_valid_moves(chess_state)) == 0:
+            minus += TRAPPED_PENALTY  
+    return minus
+
+
+def outposts_bonus(chess_state, turn):
+    bonus = 0
+    op_turn = "Black" if turn == "White" else turn
+    lst = chess_state.white_pieces if turn == "White" else chess_state.black_pieces
+    for piece in lst:
+        if piece.type in ["Knight", "Bishop"]:
+            if is_pawn_control(chess_state, piece.x, piece.y, turn) \
+               and not is_pawn_control(chess_state, piece.x, piece.y, op_turn):
+                bonus += OUTPOST_BONUS  
     return bonus
 
-def evaluate_opening(board, white_pieces, black_pieces):
-    score = 0
-
-    for piece in white_pieces:
-        score += piece_values[piece.type]
-    for piece in black_pieces:
-        score -= piece_values[piece.type]
-
-    starting_squares_white = {'Knight': [(7,1),(7,6)], 'Bishop': [(7,2),(7,5)]}
-    starting_squares_black = {'Knight': [(0,1),(0,6)], 'Bishop': [(0,2),(0,5)]}
-    develop_bonus = 20 
-
-    for piece in white_pieces:
-        if piece.type in ['Knight','Bishop'] and (piece.x, piece.y) not in starting_squares_white[piece.type]:
-            score += develop_bonus
-    for piece in black_pieces:
-        if piece.type in ['Knight','Bishop'] and (piece.x, piece.y) not in starting_squares_black[piece.type]:
-            score -= develop_bonus
-
-    center_squares = [(3,3),(3,4),(4,3),(4,4)]
-    center_control_bonus = 10
-    for piece in white_pieces:
-        if (piece.x, piece.y) in center_squares:
-            score += center_control_bonus
-    for piece in black_pieces:
-        if (piece.x, piece.y) in center_squares:
-            score -= center_control_bonus
-
-    castle_bonus = 30
-    white_king = next(p for p in white_pieces if p.type == 'King')
-    black_king = next(p for p in black_pieces if p.type == 'King')
-
-    if getattr(white_king, 'is_castle', False):
-        score += castle_bonus
-    if getattr(black_king, 'is_castle', False):
-
-        score -= castle_bonus
-    return score
-
-def get_surrounding_squares(pos, board_size=8):
-    x, y = pos
-    neighbors = []
-    for dx in (-1, 0, 1):
-        for dy in (-1, 0, 1):
-            if dx == 0 and dy == 0:
-                continue
-            nx, ny = x + dx, y + dy
-            if 0 <= nx < board_size and 0 <= ny < board_size:
-                neighbors.append((nx, ny))
-    return neighbors
-
-def evaluate_middlegame(board, white_pieces, black_pieces):
-    score = 0
-
-    for piece in white_pieces:
-        score += piece_values[piece.type]
-    for piece in black_pieces:
-        score -= piece_values[piece.type]
-
-    mobility_weights = {'Queen': 2, 'Rook': 2, 'Bishop': 1, 'Knight': 1, 'Pawn': 0.5, 'King': 0} 
-
-    for piece in white_pieces:
-        moves = piece.get_legal_moves(board, white_pieces, black_pieces)
-        score += len(moves) * mobility_weights.get(piece.type, 1)
-    for piece in black_pieces:
-        moves = piece.get_legal_moves(board, black_pieces, white_pieces)
-        score -= len(moves) * mobility_weights.get(piece.type, 1)
-
-    white_king = next(p for p in white_pieces if p.type == 'King')
-    black_king = next(p for p in black_pieces if p.type == 'King')
- 
-    king_safety_penalty = 20
-
-    white_king_square = (white_king.x, white_king.y)
-    white_king_neighbors = get_surrounding_squares(white_king_square)
-
-    pawns_near_white_king = sum(1 for p in white_pieces 
-                                 if p.type == 'Pawn' and (p.x, p.y) in white_king_neighbors)
- 
-    if pawns_near_white_king < 2:
-        score -= king_safety_penalty * (2 - pawns_near_white_king)
+def pawn_structure_point(chess_state, turn):
+    point = 0
+    pawn_file = {f:0 for f in range(8)}
+    my_lst = chess_state.white_pieces if turn == "White" else chess_state.black_pieces
+    for piece in my_lst:
+        if piece.type == "Pawn": pawn_file[piece.x] += 1
+    for f,count in pawn_file.items():
+        if count == 1:
+            point -= ISOLATED_PENALTY  
+        elif count > 1:
+            point -= DOUBLED_PENALTY * (count-1)  
+    return point
 
 
-    black_king_square = (black_king.x, black_king.y)
-    black_king_neighbors = get_surrounding_squares(black_king_square)
-    pawns_near_black_king = sum(1 for p in black_pieces 
-                                 if p.type == 'Pawn' and (p.x, p.y) in black_king_neighbors)
-    if pawns_near_black_king < 2:
-        score += king_safety_penalty * (2 - pawns_near_black_king)
-
-    return score
-
-
-def evaluate_endgame(board, white_pieces, black_pieces):
-    score = 0
-    endgame_values = {'King': 200, 'Queen': 900, 'Rook': 500, 'Bishop': 330, 'Knight': 320, 'Pawn': 100}
-
-    for piece in white_pieces:
-        score += endgame_values[piece.type]
-    for piece in black_pieces:
-        score -= endgame_values[piece.type]
-
-    def distance_to_center(pos):
-        center = (3.5, 3.5)
-        return abs(pos[0] - center[0]) + abs(pos[1] - center[1])
-    white_king = next(p for p in white_pieces if p.type == 'King')
-    black_king = next(p for p in black_pieces if p.type == 'King')
-
-    king_center_bonus = 10
-    score += (30 - 5 * distance_to_center((white_king.x, white_king.y)))  
-    score -= (30 - 5 * distance_to_center((black_king.x, black_king.y)))
-
-    def is_passed_pawn(pawn, white_pieces, black_pieces):
-        px, py = pawn.x, pawn.y
-        if pawn.color == 'white':
-            for bp in black_pieces:
-                if bp.type == 'Pawn':
-                    bx, by = (bp.x, bp.y)
-                    if bx >= px:  
-                        continue
-                    if abs(by - py) <= 1:
-                        return False
-            return True
-        else:  
-            for wp in white_pieces:
-                if wp.type == 'Pawn':
-                    wx, wy = (wp.x, wp.y)
-                    if wx <= px:
-                        continue
-                    if abs(wy - py) <= 1:
-                        return False
-            return True
-        
-    for pawn in [p for p in white_pieces if p.type == 'Pawn']:
-        if is_passed_pawn(pawn, white_pieces, black_pieces):
-            rank = pawn.x
-
-            bonus = 50 + (rank * 10)  
-            score += bonus
-    for pawn in [p for p in black_pieces if p.type == 'Pawn']:
-        if is_passed_pawn(pawn, white_pieces, black_pieces):
-            rank = pawn.x
-            bonus = 50 + ((7 - rank) * 10) 
-            score -= bonus
-
-    if len([p for p in white_pieces if p.type != 'King']) == 0 and len([p for p in black_pieces if p.type != 'King']) == 0:
-        return 0  
-
-    return score
+def passed_pawn_bonus(chess_state, turn):
+    bonus = 0
+    lst = chess_state.white_pieces if turn == "White" else chess_state.black_pieces
+    for piece in lst:
+        if piece.type == "Pawn" and is_passed_pawn(chess_state, piece):
+            rank = 7-piece.y if turn=="White" else piece.y
+            bonus += PASSED_BASE + PASSED_PER_RANK * rank  
+    return bonus
 
 
-def determine_game_phase(white_pieces, black_pieces):
-    total_material = 0
-    for piece in white_pieces + black_pieces:
-        total_material += piece_values.get(piece.type, 0)
+def endgame_king_mobility(chess_state, turn):
+    lst = chess_state.white_pieces if turn == "White" else chess_state.black_pieces
+    king = next((p for p in lst if p.type == "King"), None)
+    dist = 14 - abs(king.y-3.5) + abs(king.x-3.5)
+    return int(dist * EG_KING_MOBILITY_MULT)  
+
+
+def tactical_factors(chess_state, turn):
+    # scaled piece values inside tactical context:
+    PIECE_VALUES = {
+        'Pawn':   100,   
+        'Knight': 320,   
+        'Bishop': 330,   
+        'Rook':   500,   
+        'Queen':  900,   
+        'King':   10000  
+    }
+    raw = 0
+    opp = 'Black' if turn=='White' else 'White'
+    own_list = chess_state.white_pieces if turn=='White' else chess_state.black_pieces
+    for p in own_list:
+        for move in p.get_legal_moves(chess_state):
+            if move['type'] not in ('normal','capture'): continue
+            mi = chess_state.make_move(p, move)
+            tx, ty = mi.to_pos
+            if mi.captured:
+                gain = PIECE_VALUES[mi.captured.type] - PIECE_VALUES[p.type]
+                raw += gain * 10  # adjusted capture weight
+                if chess_state.is_in_check(opp): raw += 5   # adjusted check-on-capture
+                if chess_state.is_attacked(tx,ty,opp): raw -= 5  # adjusted attacked penalty
+            elif chess_state.is_in_check(opp):
+                if not chess_state.is_attacked(tx,ty,opp): raw += 2  # adjusted check bonus
+                else: raw -= 1  
+            chess_state.undo_move(mi)
+    return raw if turn=='White' else -raw
+
+def evaluate(chess_state, turn):
+    phase_score = {
+        "Knight" : 1,
+        "Bishop" : 1,
+        "Rook"   : 2,
+        "Queen"  : 4,
+        "Pawn"   : 0,
+        "King"   : 0
+    }
+
+    MAX_PHASE = 2 * phase_score["Knight"] * 2 + 2 * phase_score["Bishop"] * 2 + 2 * phase_score["Rook"] * 2 + 2 * phase_score["Queen"] * 1
+
+    mg_score = 0 # middle game score
+    eg_score = 0 # end game score
+
+    phase = 0
+
+    for piece in chess_state.white_pieces + chess_state.black_pieces:
+        phase += phase_score[piece.type]
+
+    phase = max(0, min(phase, MAX_PHASE))
+
+    mg_phase_factor = phase / MAX_PHASE
+    eg_phase_factor = 1 - mg_phase_factor
+
+    mg_score += development_bonus(chess_state, "White") + development_bonus(chess_state, "Black")  # * Development bonus
+    mg_score += center_control_bonus(chess_state, "White") + center_control_bonus(chess_state, "Black") # * center control bonus
+    mg_score += 5 * (mobility_bonus(chess_state, "White") - mobility_bonus(chess_state, "Black")) 
+
+    # * King safety and shield bonus
+    white_threat, white_shield = king_safety_bonus(chess_state, "White")
+    black_threat, black_shied = king_safety_bonus(chess_state, "Black")
+
+    mg_score = mg_score + 5 * (white_threat - black_threat) + 2 * (white_shield - black_shied)
+
+    # * Trapped pieces minus
+    mg_score = mg_score + trapped_minus(chess_state, "White") - trapped_minus(chess_state, "Black")
+
+    # * Outpost bonus
+    mg_score = mg_score + outposts_bonus(chess_state, "White") - outposts_bonus(chess_state, "Black")
+
+    # * Pawn structure point
+    mg_score = mg_score + pawn_structure_point(chess_state, "White") - pawn_structure_point(chess_state, "Black")
+
+    # * Passed pawn bonus
+    mg_score = mg_score + passed_pawn_bonus(chess_state, "White") - passed_pawn_bonus(chess_state, "Black")
+
+    if phase < MAX_PHASE * 0.3:
+        eg_score = eg_score + endgame_king_mobility(chess_state, "White") - endgame_king_mobility(chess_state, "Black")
+
+    # * Tactical factor bonus
+    mg_score += tactical_factors(chess_state, turn)
+
+    # * Contempt factor
+    if len(chess_state.white_pieces) + len(chess_state.black_pieces) <= 4:
+        mg_score += CONTEMPT_VALUE if mg_score < 0 else -CONTEMPT_VALUE
     
-    if total_material > 3000:
-        return 'opening'
-    elif total_material > 1500:
-        return 'middlegame'
-    else:
-        return 'endgame'
+    score = mg_score * mg_phase_factor + eg_score * eg_phase_factor
 
-
-def evaluate_position(board, white_pieces, black_pieces, turn):
-    if turn.lower() == "white":
-        my_pieces = white_pieces
-        opponent_pieces = black_pieces
-    else:
-        my_pieces = black_pieces
-        opponent_pieces = white_pieces
-
-    if is_checkmate(board, opponent_pieces, my_pieces):
-        return 10000
-    
-    if is_checkmate(board, my_pieces, opponent_pieces):
-        return -10000
-
-    all_moves = []
-    for piece in my_pieces:
-        moves = piece.get_legal_moves(board, white_pieces, black_pieces)
-        if moves:
-            all_moves.extend(moves)
-    if not all_moves:
-        return 0
-    
-
-    white_non_king = [p for p in white_pieces if p.type != "King"]
-    black_non_king = [p for p in black_pieces if p.type != "King"]
-
-    no_pawns = all(p.type != "Pawn" for p in white_non_king + black_non_king)
-    if no_pawns:
-        if (len(white_non_king) <= 1 and len(black_non_king) <= 1):
-            if not any(p.type in ("Queen", "Rook") for p in white_non_king + black_non_king):
-                return 0
-
-        if len(white_non_king) == 2 and len(black_non_king) == 0:
-            piece_types = sorted(p.type for p in white_non_king)
-            if piece_types == ["Knight", "Knight"]:
-                return 0
-        if len(black_non_king) == 2 and len(white_non_king) == 0:
-            piece_types = sorted(p.type for p in black_non_king)
-            if piece_types == ["Knight", "Knight"]:
-                return 0
-    
-    total_pieces = len(white_pieces) + len(black_pieces)
-    if total_pieces > 26:
-        score = evaluate_opening(board, white_pieces, black_pieces)
-    elif total_pieces > 14:
-        score = evaluate_middlegame(board, white_pieces, black_pieces)
-    else:
-        score = evaluate_endgame(board, white_pieces, black_pieces)
-    
-    return score + threat_bonus(board, my_pieces, opponent_pieces)
+    return int(score)

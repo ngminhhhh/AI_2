@@ -54,7 +54,7 @@ def init():
     font    = pygame.font.SysFont('Ubuntu', 24)
 
     piece_images    = load_piece_images()
-    white_pieces, black_pieces, board   = init_piece(piece_images)
+    chess_state   = ChessState.init_begin_state(piece_images)
 
     btn_rect = pygame.Rect(BOARD_WIDTH + PANEL_MARGIN , (HEIGHT - start_btn_height) // 2, start_btn_width, start_btn_height)
     
@@ -73,9 +73,7 @@ def init():
         'screen'       : screen,
         'clock'        : clock,
         'font'         : font,
-        'white_pieces' : white_pieces,
-        'black_pieces' : black_pieces,
-        'board'        : board,
+        'chess_state'  : chess_state,
         'start_btn_rect': btn_rect,
         'white_side_btn': white_side_btn,
         'black_side_btn': black_side_btn,
@@ -104,9 +102,7 @@ def run():
     screen       = ctx['screen']
     clock        = ctx['clock']
     font         = ctx['font']
-    white_pieces = ctx['white_pieces']
-    black_pieces = ctx['black_pieces']
-    board        = ctx['board']
+    chess_state  = ctx['chess_state']
     start_btn_rect     = ctx['start_btn_rect']
     started      = ctx['started']
     white_side_btn = ctx['white_side_btn']
@@ -172,11 +168,7 @@ def run():
                             choose_level_state = False
                             started = True
 
-                            stepper = play_chess(board,
-                                    white_pieces,
-                                    black_pieces,
-                                    depth,
-                                    side)
+                            stepper = play_chess(chess_state, depth,side)
                             
                             last_move_time = pygame.time.get_ticks()
                     
@@ -187,9 +179,7 @@ def run():
                     side = None
                     depth = 0
 
-                    restart_all()
-                    white_pieces, black_pieces, board   = init_piece(load_piece_images())
-
+                    chess_state   = ChessState.init_begin_state(load_piece_images())
 
         # * Engine render
         if started and pygame.time.get_ticks() - last_move_time >= move_delay:
@@ -215,8 +205,8 @@ def run():
                 pygame.draw.rect(screen, color, rect)
 
         # * Draw chess piece
-        draw_piece(screen, white_pieces)
-        draw_piece(screen, black_pieces)
+        draw_piece(screen, chess_state.white_pieces)
+        draw_piece(screen, chess_state.black_pieces)
 
         # * Draw sidebar
         pygame.draw.rect(screen, PANEL_BG, (BOARD_WIDTH, 0, PANEL_WIDTH, HEIGHT))
@@ -238,7 +228,7 @@ def run():
 
         # * Draw message and restart button
         if restart_state:
-            txt = font.render(game_over_msg, True, TEXT_COL)
+            txt = font.render(str(game_over_msg), True, TEXT_COL)
 
             x = BOARD_WIDTH + (PANEL_WIDTH - txt.get_width()) // 2
             y = restart_btn.y - 100  
