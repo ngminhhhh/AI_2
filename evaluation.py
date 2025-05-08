@@ -201,19 +201,30 @@ def tactical_factors(chess_state, turn):
     opp = 'Black' if turn=='White' else 'White'
     own_list = chess_state.white_pieces if turn=='White' else chess_state.black_pieces
     for p in own_list:
+
         for move in p.get_legal_moves(chess_state):
-            if move['type'] not in ('normal','capture'): continue
+            if move['type'] not in ('normal'): continue
+
             mi = chess_state.make_move(p, move)
             tx, ty = mi.to_pos
+
+            if mi.captured and mi.captured.type == "King":
+                chess_state.undo_move(mi)
+                return 1000
+
             if mi.captured:
                 gain = PIECE_VALUES[mi.captured.type] - PIECE_VALUES[p.type]
-                raw += gain * 10  # adjusted capture weight
-                if chess_state.is_in_check(opp): raw += 5   # adjusted check-on-capture
-                if chess_state.is_attacked(tx,ty,opp): raw -= 5  # adjusted attacked penalty
+                raw += gain * 10  
+
+                if chess_state.is_in_check(opp): raw += 5   
+                if chess_state.is_attacked(tx,ty,opp): raw -= 5  
+
             elif chess_state.is_in_check(opp):
-                if not chess_state.is_attacked(tx,ty,opp): raw += 2  # adjusted check bonus
+                if not chess_state.is_attacked(tx,ty,opp): raw += 2  
                 else: raw -= 1  
+
             chess_state.undo_move(mi)
+
     return raw if turn=='White' else -raw
 
 def evaluate(chess_state, turn):
