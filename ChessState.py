@@ -37,6 +37,7 @@ class ChessState:
         self.white_pieces = white_pieces
         self.black_pieces = black_pieces
         self.images = images
+        self.score = 0
 
         self.board = [[None for _ in range(board_size)] for _ in range(board_size)]
 
@@ -105,12 +106,17 @@ class ChessState:
         x, y = pos 
         return chr(x + 65) + str(board_size - y)
     
-    def map_to_sym(self, type):
+    def map_to_sym(self, type, color):
+        piece_type = type[0]
         if type == "Knight":
-            return "N"
-        return type[0]
+            piece_type = "N"
 
-    def make_move(self, piece, move) -> MoveInfo:
+        if color == "Black":
+            piece_type = piece_type.lower()
+
+        return piece_type
+
+    def make_move(self, piece, move, score = 0) -> MoveInfo:
         captured = move["captured"]
         move_info = MoveInfo(
             type                =   move["type"],
@@ -122,6 +128,11 @@ class ChessState:
             captured_old_pos    =   (captured.x, captured.y) if captured else None,
             en_passant_prev     =   self.en_passant
         )        
+
+        if piece.color == "White":
+            self.score += score
+        else:
+            self.score -= score
 
         if captured:
             self._remove_piece(captured)
@@ -156,7 +167,7 @@ class ChessState:
 
         return move_info
     
-    def undo_move(self, move_info: MoveInfo) -> None:
+    def undo_move(self, move_info: MoveInfo, score = 0) -> None:
         self.en_passant = move_info.en_passant_prev
 
         if move_info.type == 'promotion':
@@ -173,6 +184,11 @@ class ChessState:
         if move_info.captured:
             pos = move_info.captured_old_pos or move_info.to_pos
             self._add_piece(move_info.captured, pos[0], pos[1])
+
+        if move_info.piece.color == "White":
+            self.score -= score
+        else:
+            self.score += score
 
     def is_attacked(self, x, y, attack_turn):
         attackers = self.white_pieces if attack_turn == "White" else self.black_pieces
@@ -276,7 +292,7 @@ class ChessState:
                     if empty:
                         row += str(empty)
                         empty = 0
-                    sym = self.map_to_sym(p.type)
+                    sym = self.map_to_sym(p.type, p.color)
                     row += sym.upper() if p.color=='White' else sym.lower()
             if empty:
                 row += str(empty)

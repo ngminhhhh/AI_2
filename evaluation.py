@@ -25,10 +25,10 @@ OUTPOST_BONUS = 8
 ISOLATED_PENALTY = -5  
 DOUBLED_PENALTY  = -5  
 
-PASSED_BASE    = 10  
+PASSED_BASE    = 15 
 PASSED_PER_RANK= 2   
 
-EG_KING_MOBILITY_MULT = 2  
+EG_KING_MOBILITY_MULT = 1
 
 CONTEMPT_VALUE = 10  
 
@@ -100,7 +100,7 @@ def mobility_bonus(chess_state, turn):
     mobility_point = 0
     lst = chess_state.white_pieces if turn == "White" else chess_state.black_pieces
     for piece in lst:
-        moves = piece.get_valid_moves(chess_state)
+        moves = piece.get_legal_moves(chess_state)
         mobility_point += MOBILITY_WEIGHT[piece.type] * len(moves)
     return mobility_point
 
@@ -140,7 +140,7 @@ def trapped_minus(chess_state, turn):
     minus = 0
     lst = chess_state.white_pieces if turn == "White" else chess_state.black_pieces
     for piece in lst:
-        if len(piece.get_valid_moves(chess_state)) == 0:
+        if len(piece.get_legal_moves(chess_state)) == 0:
             minus += TRAPPED_PENALTY  
     return minus
 
@@ -188,7 +188,6 @@ def endgame_king_mobility(chess_state, turn):
 
 
 def tactical_factors(chess_state, turn):
-    # scaled piece values inside tactical context:
     PIECE_VALUES = {
         'Pawn':   100,   
         'Knight': 320,   
@@ -203,87 +202,108 @@ def tactical_factors(chess_state, turn):
     for p in own_list:
 
         for move in p.get_legal_moves(chess_state):
-            if move['type'] not in ('normal'): continue
+            if move['type'] != 'normal': continue
+            if move['captured'] is None: continue
 
-            mi = chess_state.make_move(p, move)
-            tx, ty = mi.to_pos
+            gain = PIECE_VALUES[move['captured'].type] - PIECE_VALUES[p.type]
+            raw += gain * 10
 
-            if mi.captured and mi.captured.type == "King":
-                chess_state.undo_move(mi)
-                return 1000
-
-            if mi.captured:
-                gain = PIECE_VALUES[mi.captured.type] - PIECE_VALUES[p.type]
-                raw += gain * 10  
-
-                if chess_state.is_in_check(opp): raw += 5   
-                if chess_state.is_attacked(tx,ty,opp): raw -= 5  
-
-            elif chess_state.is_in_check(opp):
-                if not chess_state.is_attacked(tx,ty,opp): raw += 2  
-                else: raw -= 1  
-
-            chess_state.undo_move(mi)
 
     return raw if turn=='White' else -raw
 
 def evaluate(chess_state, turn):
-    phase_score = {
-        "Knight" : 1,
-        "Bishop" : 1,
-        "Rook"   : 2,
-        "Queen"  : 4,
-        "Pawn"   : 0,
-        "King"   : 0
-    }
+    # phase_score = {
+    #     "Knight" : 1,
+    #     "Bishop" : 1,
+    #     "Rook"   : 2,
+    #     "Queen"  : 4,
+    #     "Pawn"   : 0,
+    #     "King"   : 0
+    # }
 
-    MAX_PHASE = 2 * phase_score["Knight"] * 2 + 2 * phase_score["Bishop"] * 2 + 2 * phase_score["Rook"] * 2 + 2 * phase_score["Queen"] * 1
+    # MAX_PHASE = 2 * phase_score["Knight"] * 2 + 2 * phase_score["Bishop"] * 2 + 2 * phase_score["Rook"] * 2 + 2 * phase_score["Queen"] * 1
 
-    mg_score = 0 # middle game score
-    eg_score = 0 # end game score
+    # mg_score = 0 # middle game score
+    # eg_score = 0 # end game score
 
-    phase = 0
+    # phase = 0
+    # white_points, black_points = 0, 0
+    # for piece in chess_state.white_pieces + chess_state.black_pieces:
+    #     phase += phase_score[piece.type]
+    #     if piece.color == "White":
+    #         white_points += piece.point * 10
+    #     else:
+    #         black_points += piece.point * 10
 
-    for piece in chess_state.white_pieces + chess_state.black_pieces:
-        phase += phase_score[piece.type]
+    # phase = max(0, min(phase, MAX_PHASE))
 
-    phase = max(0, min(phase, MAX_PHASE))
+    # mg_phase_factor = phase / MAX_PHASE
+    # eg_phase_factor = 1 - mg_phase_factor
 
-    mg_phase_factor = phase / MAX_PHASE
-    eg_phase_factor = 1 - mg_phase_factor
+    # mg_score += development_bonus(chess_state, "White") + development_bonus(chess_state, "Black")  # * Development bonus
+    # mg_score += center_control_bonus(chess_state, "White") + center_control_bonus(chess_state, "Black") # * center control bonus
+    # mg_score += 5 * (mobility_bonus(chess_state, "White") - mobility_bonus(chess_state, "Black")) 
 
-    mg_score += development_bonus(chess_state, "White") + development_bonus(chess_state, "Black")  # * Development bonus
-    mg_score += center_control_bonus(chess_state, "White") + center_control_bonus(chess_state, "Black") # * center control bonus
-    mg_score += 5 * (mobility_bonus(chess_state, "White") - mobility_bonus(chess_state, "Black")) 
+    # # * King safety and shield bonus
+    # white_threat, white_shield = king_safety_bonus(chess_state, "White")
+    # black_threat, black_shied = king_safety_bonus(chess_state, "Black")
 
-    # * King safety and shield bonus
-    white_threat, white_shield = king_safety_bonus(chess_state, "White")
-    black_threat, black_shied = king_safety_bonus(chess_state, "Black")
+    # mg_score = mg_score + 5 * (white_threat - black_threat) + 2 * (white_shield - black_shied)
 
-    mg_score = mg_score + 5 * (white_threat - black_threat) + 2 * (white_shield - black_shied)
+    # # * Trapped pieces minus
+    # mg_score = mg_score + trapped_minus(chess_state, "White") - trapped_minus(chess_state, "Black")
 
-    # * Trapped pieces minus
-    mg_score = mg_score + trapped_minus(chess_state, "White") - trapped_minus(chess_state, "Black")
+    # # * Outpost bonus
+    # mg_score = mg_score + outposts_bonus(chess_state, "White") - outposts_bonus(chess_state, "Black")
 
-    # * Outpost bonus
-    mg_score = mg_score + outposts_bonus(chess_state, "White") - outposts_bonus(chess_state, "Black")
+    # # * Pawn structure point
+    # mg_score = mg_score + pawn_structure_point(chess_state, "White") - pawn_structure_point(chess_state, "Black")
 
-    # * Pawn structure point
-    mg_score = mg_score + pawn_structure_point(chess_state, "White") - pawn_structure_point(chess_state, "Black")
+    # # * Passed pawn bonus
+    # mg_score = mg_score + passed_pawn_bonus(chess_state, "White") - passed_pawn_bonus(chess_state, "Black")
 
-    # * Passed pawn bonus
-    mg_score = mg_score + passed_pawn_bonus(chess_state, "White") - passed_pawn_bonus(chess_state, "Black")
+    # if phase < MAX_PHASE * 0.3:
+    #     eg_score = eg_score + endgame_king_mobility(chess_state, "White") - endgame_king_mobility(chess_state, "Black")
 
-    if phase < MAX_PHASE * 0.3:
-        eg_score = eg_score + endgame_king_mobility(chess_state, "White") - endgame_king_mobility(chess_state, "Black")
+    # # * Tactical factor bonus
+    # OPENING_CUTOFF = 0.8
+    # if mg_phase_factor <= OPENING_CUTOFF:
+    #     mg_score += tactical_factors(chess_state, turn) + (white_points - black_points)
 
-    # * Tactical factor bonus
-    mg_score += tactical_factors(chess_state, turn)
-
-    # * Contempt factor
-    if len(chess_state.white_pieces) + len(chess_state.black_pieces) <= 4:
-        mg_score += CONTEMPT_VALUE if mg_score < 0 else -CONTEMPT_VALUE
+    # # * Contempt factor
+    # if len(chess_state.white_pieces) + len(chess_state.black_pieces) <= 4:
+    #     mg_score += CONTEMPT_VALUE if mg_score < 0 else -CONTEMPT_VALUE
     
-    score = mg_score * mg_phase_factor + eg_score * eg_phase_factor
+    # score = mg_score * mg_phase_factor + eg_score * eg_phase_factor
+
+    # return int(score)
+    phase_score = len(chess_state.white_pieces) + len(chess_state.black_pieces)
+
+    if phase_score > 26: 
+        phase = "opening"
+    elif phase_score > 10:
+        phase = "middlegame"
+    else: 
+        phase = "endgame"
+
+    score = 0
+    if phase == "opening":
+        score += development_bonus(chess_state, "White") + development_bonus(chess_state, "Black")  # * Development bonus
+        score += center_control_bonus(chess_state, "White") + center_control_bonus(chess_state, "Black") # * center control bonus
+        score = score + outposts_bonus(chess_state, "White") - outposts_bonus(chess_state, "Black")
+
+        white_threat, white_shield = king_safety_bonus(chess_state, "White")
+        black_threat, black_shied = king_safety_bonus(chess_state, "Black")
+
+        score = score + (white_threat - black_threat) + (white_shield - black_shied)
+
+    elif phase == "middlegame":
+        score += tactical_factors(chess_state, turn)
+        score += (mobility_bonus(chess_state, "White") - mobility_bonus(chess_state, "Black")) 
+
+    else:
+        score = score + passed_pawn_bonus(chess_state, "White") - passed_pawn_bonus(chess_state, "Black")
+        score += tactical_factors(chess_state, turn)
+        score += endgame_king_mobility(chess_state, "White") - endgame_king_mobility(chess_state, "Black")
 
     return int(score)
