@@ -49,8 +49,8 @@ pst = {
            -55,  50,  11,  -4, -19,  13,   0, -49,
            -55, -43, -52, -28, -51, -47,  -8, -50,
            -47, -42, -43, -79, -64, -32, -29, -32,
-            -4,   3, -14, -50, -57, -18,  13,   4,
-            17,  30,  -3, -14,   6,  -1,  40,  18),
+            -4,   3, -14, -70, -72, -18,  13,   4,
+            17,  30,  -3, -30, -25,  -1,  40,  18),
 }
 
 
@@ -63,7 +63,7 @@ def evaluate(chess_state, piece, move):
     to_idx =  (7 - to_pos[1]) * 8 + (to_pos[0])
 
     score = pst[p.upper()][to_idx] - pst[p.upper()][from_idx]
-    
+
     if move["captured"]:
         cap_sym = chess_state.map_to_sym(move["captured"].type, move["captured"].color)
         score += piece_vals[cap_sym.upper()]

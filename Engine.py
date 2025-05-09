@@ -16,7 +16,7 @@ def generate_random_move(chess_state, turn):
 
     return random.choice(all_moves)
 
-def alpha_beta_engine(chess_state, depth, maximize, alpha=float("-inf"), beta=float("inf"), last_move=None):
+def alpha_beta_engine(chess_state, depth, maximize, alpha=float("-inf"), beta=float("inf"), last_move=None, last_delta = None):
     turn = "white" if maximize else "black"
 
     if depth == 0:
@@ -31,8 +31,10 @@ def alpha_beta_engine(chess_state, depth, maximize, alpha=float("-inf"), beta=fl
             
             for move in moves:
                 delta = evaluate(chess_state, piece, move)
+                if last_delta is not None and last_delta == delta:
+                    delta = delta // 2
                 move_info = chess_state.make_move(piece, move, delta)
-                value, _ = alpha_beta_engine(chess_state=chess_state, depth=depth-1, alpha=alpha, beta=beta, maximize=False,last_move=move_info)
+                value, _ = alpha_beta_engine(chess_state=chess_state, depth=depth-1, alpha=alpha, beta=beta, maximize=False,last_move=move_info, last_delta=delta)
 
                 if value > best_value:
                     best_value = value
@@ -58,8 +60,10 @@ def alpha_beta_engine(chess_state, depth, maximize, alpha=float("-inf"), beta=fl
 
             for move in moves:
                 delta = evaluate(chess_state, piece, move)
+                if last_delta is not None and last_delta == delta:
+                    delta = delta // 2
                 move_info = chess_state.make_move(piece, move, delta)
-                value, _ = alpha_beta_engine(chess_state=chess_state, depth=depth-1, alpha=alpha, beta=beta, maximize=True,last_move=move_info)
+                value, _ = alpha_beta_engine(chess_state=chess_state, depth=depth-1, alpha=alpha, beta=beta, maximize=True,last_move=move_info, last_delta=delta)
 
                 if value < best_value:
                     best_value = value
