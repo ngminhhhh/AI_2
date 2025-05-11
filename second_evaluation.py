@@ -104,8 +104,6 @@ def evaluate(chess_state, piece, move):
         idx = to_idx if is_white else 63 - to_idx
         if move["type"] == "Promotion":
             score += pst["Q"][idx] - pst["P"][idx]
-        # if to_pos == move.en_passant_prev:
-        #     score += pst["P"][idx - 10]
 
     return score
 

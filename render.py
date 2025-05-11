@@ -162,7 +162,7 @@ def run():
                             break
 
                 if choose_level_state:
-                    for btn, level in [(level_easy_btn, 3), (level_medium_btn, 4), (level_hard_btn, 5)]:
+                    for btn, level in [(level_easy_btn, 1), (level_medium_btn, 2), (level_hard_btn, 3)]:
                         if btn.collidepoint(mx, my):
                             depth = level
                             choose_level_state = False
